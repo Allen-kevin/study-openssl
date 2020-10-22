@@ -30,7 +30,7 @@ void ShowCerts(SSL *ssl)
 }
 
 
-int tcp_socket(char *str, int len, char **argv)
+int tcp_socket_connect(char **argv)
 {
     int sockfd;
     struct sockaddr_in dest;
@@ -59,9 +59,11 @@ int tcp_socket(char *str, int len, char **argv)
 }
 
 
-void tls_init(SSL_CTX *ctx, SSL *ssl, BIO *client_io)
+void tls_init()
 {
-  
+ 	SSL_library_init();
+	OpenSSL_add_all_algorithms();
+	SSL_load_error_strings();
 }
 
 
@@ -76,10 +78,9 @@ int main(int argc, char **argv)
 	char buffer[MAXBUF+1];
 	SSL_CTX *ctx;
 	SSL *ssl;
-
-	SSL_library_init();
-	OpenSSL_add_all_algorithms();
-	SSL_load_error_strings();
+    
+    sockfd = tcp_socket_connect(argv);
+    tls_init();
 	ctx = SSL_CTX_new(SSLv23_client_method());
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stdout);
