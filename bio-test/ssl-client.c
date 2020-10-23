@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 	}
     
     send(sockfd, buffer, len, 0);
-
+err:
     close(sockfd);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);

@@ -60,6 +60,7 @@ int tcp_socket(char **argv)
 	} else
 		printf("begin listen\n");
 
+    len = sizeof(struct sockaddr);
     new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &len); 
     if (new_fd == -1) {
         perror("accept");
@@ -130,6 +131,13 @@ void tls_ssl_init(SSL_CTX *ctx, char **argv)
 	}
 }
 
+void tls_init()
+{
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+}
+
 
 int main(int argc, char **argv)
 {
@@ -139,10 +147,30 @@ int main(int argc, char **argv)
 	SSL_CTX *ctx;
     SSL *ssl;
 
-    new_fd = tcp_socket(argv);
+    tls_init();
 
-#if 0
-    tls_ssl_init(ctx, argv);
+	ctx = SSL_CTX_new(SSLv23_server_method());
+
+	if (ctx == NULL) {
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+
+	if (SSL_CTX_use_certificate_file(ctx, argv[4], SSL_FILETYPE_PEM) <= 0) {
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+
+	if (SSL_CTX_use_PrivateKey_file(ctx, argv[5], SSL_FILETYPE_PEM) <= 0) {
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+
+	if (!SSL_CTX_check_private_key(ctx)) {
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+    //tls_ssl_init(ctx, argv);
 
     BIO *server = NULL, *server_io = NULL;
     size_t bufsiz = 1024;
@@ -154,16 +182,22 @@ int main(int argc, char **argv)
 
     ssl = SSL_new(ctx);
     SSL_set_bio(ssl, server, server);
-    len = sizeof(struct sockaddr);
-#endif
+
+    new_fd = tcp_socket(argv);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
     printf("msg: %s\n", buffer);
-//    BIO_write(server_io, buffer, len);
-//    ret = SSL_accept(ssl);
-/*
+    BIO_write(server_io, buffer, len);
+    ret = SSL_accept(ssl);
+    
+    char *bio_buf = NULL;
+    len = BIO_ctrl_pending(server_io);
+    bio_buf = (char *)OPENSSL_malloc(len);
+    len = BIO_read(server_io, bio_buf, len);
+    printf("bio buf: %s\n", bio_buf);
+
     SSL_shutdown(ssl);
     SSL_free(ssl);
 	SSL_CTX_free(ctx);
-*/
+
 	return 0;
 }
