@@ -17,8 +17,9 @@
 
 int tcp_socket(char **argv)
 {
-    int sockfd;
-    struct sockaddr_in my_addr;
+    int sockfd, new_fd;
+    socklen_t len;
+    struct sockaddr_in my_addr, their_addr;
     unsigned int myport, lisnum;
 
 	if (argv[1])
@@ -58,8 +59,17 @@ int tcp_socket(char **argv)
 		exit(1);
 	} else
 		printf("begin listen\n");
-    
-    return sockfd;
+
+    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &len); 
+    if (new_fd == -1) {
+        perror("accept");
+        exit(errno);
+    } else {
+        printf("server: got connection from %s, port %d, socket %d\n", inet_ntoa(their_addr.sin_addr),
+        ntohs(their_addr.sin_port), new_fd);
+    }
+   
+    return new_fd;
 }
 
 
@@ -86,12 +96,12 @@ void recv_send_data(int sockfd)
     if (recv_len <= 0) {
         printf("receive failure, close session!\n");
         close(new_fd);
-        goto finish;
+        return;
     }
 
 }
 
-void tsl_ssl_init(SSL_CTX *ctx, char **argv)
+void tls_ssl_init(SSL_CTX *ctx, char **argv)
 {
 	SSL_library_init();
 	OpenSSL_add_all_algorithms();
@@ -123,53 +133,37 @@ void tsl_ssl_init(SSL_CTX *ctx, char **argv)
 
 int main(int argc, char **argv)
 {
-    tcp_socket(argv);
-	char buf[MAXBUF+1];
+	char buffer[MAXBUF+1];
+    int new_fd, ret = 1, len;
 
 	SSL_CTX *ctx;
-    tsl_ssl_init(ctx, argv);
+    SSL *ssl;
 
-	while (1) {
-		SSL *ssl;
+    new_fd = tcp_socket(argv);
 
-		ssl = SSL_new(ctx);
-		SSL_set_fd(ssl, new_fd);
-		if (SSL_accept(ssl) == -1) {
-			perror("accept");
-			close(new_fd);
-			break;
-		}
+#if 0
+    tls_ssl_init(ctx, argv);
 
-		bzero(buf, MAXBUF+1);
-		strcpy(buf, "server->client");
-		len = SSL_write(ssl, buf, strlen(buf));
+    BIO *server = NULL, *server_io = NULL;
+    size_t bufsiz = 1024;
 
-		if (len <= 0) {
-			printf("msg %s send failure! error code %d, errno msg %s\n",
-				buf, errno, strerror(errno));
-			goto finish;
-		} else {
-			printf("msg %s send success, total send msg %d bytes!\n",
-				buf, len);
-		}
+    if (!BIO_new_bio_pair(&server, bufsiz, &server_io, bufsiz)) {
+        ERR_print_errors_fp(stdout);
+        exit(1);
+    }
 
-		bzero(buf, MAXBUF+1);
-		len = SSL_read(ssl, buf, MAXBUF);
-		if (len > 0) {
-			printf("rcv msg successfully: %s, total %d bytes\n",
-				buf, len);
-		} else {
-			printf("msg failure! errno code %d, errno msg %s\n",
-				errno, strerror(errno));
-		}
-
-	finish:
-		SSL_shutdown(ssl);
-		SSL_free(ssl);
-		close(new_fd);
-	}
-
-	close(sockfd);
+    ssl = SSL_new(ctx);
+    SSL_set_bio(ssl, server, server);
+    len = sizeof(struct sockaddr);
+#endif
+    len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
+    printf("msg: %s\n", buffer);
+//    BIO_write(server_io, buffer, len);
+//    ret = SSL_accept(ssl);
+/*
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
 	SSL_CTX_free(ctx);
+*/
 	return 0;
 }

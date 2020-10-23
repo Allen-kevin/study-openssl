@@ -67,6 +67,10 @@ void tls_init()
 }
 
 
+void tls_connect(SSL_CTX *ctx, SSL *ssl, BIO *client_io)
+{
+}
+
 int main(int argc, char **argv)
 {	
     if (argc != 3) {
@@ -74,13 +78,14 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
+	char *buffer = NULL;
 	int len, sockfd, ret = 5;
-	char buffer[MAXBUF+1];
 	SSL_CTX *ctx;
 	SSL *ssl;
-    
+
     sockfd = tcp_socket_connect(argv);
     tls_init();
+
 	ctx = SSL_CTX_new(SSLv23_client_method());
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stdout);
@@ -88,11 +93,12 @@ int main(int argc, char **argv)
 	}
     
     BIO *client = NULL, *client_io = NULL;
+    size_t bufsiz = 1024;
 
-    size_t bufsiz = 256;
-
-    if (!BIO_new_bio_pair(&client, bufsiz, &client_io, bufsiz))
-        goto err;
+    if (!BIO_new_bio_pair(&client, bufsiz, &client_io, bufsiz)) {
+        ERR_print_errors_fp(stdout);
+        exit(1);
+    }
 
 	ssl = SSL_new(ctx);
     SSL_set_bio(ssl, client, client);
@@ -100,7 +106,10 @@ int main(int argc, char **argv)
     ret = SSL_connect(ssl);
     printf("ret = %d\n", ret);
 
-	len = BIO_read(client_io, buffer, MAXBUF);
+    len = BIO_ctrl_pending(client_io);
+    buffer = (char *)OPENSSL_malloc(len);
+	len = BIO_read(client_io, buffer, len);
+
 	if (len > 0) {
 		printf("rcv msg success: %s, total %d bytes\n", buffer, len);
 	} else {
@@ -109,8 +118,9 @@ int main(int argc, char **argv)
 		goto err;
 	}
     
+    send(sockfd, buffer, len, 0);
 
-err:
+    close(sockfd);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	SSL_CTX_free(ctx);
