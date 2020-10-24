@@ -105,13 +105,17 @@ int main(int argc, char **argv)
 
     ret = SSL_connect(ssl);
     printf("ret = %d\n", ret);
-
+    
     len = BIO_ctrl_pending(client_io);
     buffer = (char *)OPENSSL_malloc(len);
 	len = BIO_read(client_io, buffer, len);
+    
+    int i = 0;
+    for (; i < len; i++)
+        printf("%c", buffer[i]);
 
 	if (len > 0) {
-		printf("rcv msg success: %s, total %d bytes\n", buffer, len);
+		printf("rcv msg success: %s, total %d bytes\n", buffer, strlen(buffer));
 	} else {
 		printf("rcv msg failure!, error code %d, error msg %s\n",
 			errno, strerror(errno));
