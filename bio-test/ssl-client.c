@@ -113,10 +113,6 @@ int main(int argc, char **argv)
     buffer = (char *)OPENSSL_malloc(len);
 	len = BIO_read(client_io, buffer, len);
     
-    int i = 0;
-    for (; i < len; i++)
-        printf("%c", buffer[i]);
-
 	if (len > 0) {
 		printf("rcv msg success: %s, total %d bytes\n", buffer, strlen(buffer));
 	} else {
@@ -126,6 +122,9 @@ int main(int argc, char **argv)
 	}
     
     send(sockfd, buffer, len, 0);
+
+    len = recv(sockfd, buffer, sizeof(buffer)-1, 0);
+    printf("msg: %s, len = %d\n", buffer, strlen(buffer));
 err:
     close(sockfd);
 	SSL_shutdown(ssl);
