@@ -102,11 +102,14 @@ int main(int argc, char **argv)
 
 	ssl = SSL_new(ctx);
     SSL_set_bio(ssl, client, client);
-
     ret = SSL_connect(ssl);
     printf("ret = %d\n", ret);
     
     len = BIO_ctrl_pending(client_io);
+
+    if (len <= 0)
+        goto err;
+
     buffer = (char *)OPENSSL_malloc(len);
 	len = BIO_read(client_io, buffer, len);
     

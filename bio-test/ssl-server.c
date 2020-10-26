@@ -185,7 +185,7 @@ int main(int argc, char **argv)
 
     new_fd = tcp_socket(argv);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
-    printf("msg: %s\n", buffer);
+    printf("msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
     ret = SSL_accept(ssl);
     
