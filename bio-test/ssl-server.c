@@ -191,9 +191,12 @@ int main(int argc, char **argv)
     
     char *bio_buf = NULL;
     len = BIO_ctrl_pending(server_io);
+    printf("server len = %d\n", len);
     bio_buf = (char *)OPENSSL_malloc(len);
     len = BIO_read(server_io, bio_buf, len);
     printf("bio buf: %s\n", bio_buf);
+    
+    send(new_fd, bio_buf, len, 0);
 
     SSL_shutdown(ssl);
     SSL_free(ssl);
