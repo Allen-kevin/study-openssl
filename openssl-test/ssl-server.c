@@ -121,7 +121,6 @@ int main(int argc, char **argv)
 			printf("msg %s send success, total send msg %d bytes!\n",
 				buf, len);
 		}
-
 		bzero(buf, MAXBUF+1);
 		len = SSL_read(ssl, buf, MAXBUF);
 		if (len > 0) {

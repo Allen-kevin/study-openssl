@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	char *buffer = NULL;
+	char *buffer = NULL, *buffer_cipher = NULL;
 	int len, sockfd, ret = 5;
 	SSL_CTX *ctx;
 	SSL *ssl;
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 
 	ssl = SSL_new(ctx);
     SSL_set_bio(ssl, client, client);
-    ret = SSL_connect(ssl);
+    ret = SSL_connect(ssl); //
     printf("ret = %d\n", ret);
     
     len = BIO_ctrl_pending(client_io);
@@ -121,10 +121,21 @@ int main(int argc, char **argv)
 		goto err;
 	}
     
-    send(sockfd, buffer, len, 0);
+    send(sockfd, buffer, len, 0); //send client hello
 
+    //receive server hello
     len = recv(sockfd, buffer, sizeof(buffer)-1, 0);
     printf("msg: %s, len = %d\n", buffer, strlen(buffer));
+    BIO_write(client_io, buffer, len);
+    ret = SSL_do_handshake(ssl);
+    len =BIO_ctrl_pending(client_io);
+    if (len <= 0)
+        goto err;
+    buffer_cipher = (char *)OPENSSL_malloc(len);
+    len = BIO_read(client_io, buffer, len);
+
+    send(sockfd, buffer_cipher, len, 0);//
+
 err:
     close(sockfd);
 	SSL_shutdown(ssl);

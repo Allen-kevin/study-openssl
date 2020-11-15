@@ -11,8 +11,15 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
+#include <openssl/buffer.h>
 #include <openssl/err.h>
-
+#include <openssl/comp.h>
+#include <openssl/bio.h>
+#include <openssl/rsa.h>
+#include <openssl/dsa.h>
+#include <openssl/async.h>
+#include <openssl/symhacks.h>
+#include <openssl/ct.h>
 #define MAXBUF 1024
 
 int tcp_socket(char **argv)
@@ -182,10 +189,11 @@ int main(int argc, char **argv)
 
     ssl = SSL_new(ctx);
     SSL_set_bio(ssl, server, server);
+    //ssl->version;
 
     new_fd = tcp_socket(argv);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
-    printf("msg: %s, len = %d\n", buffer, strlen(buffer));
+    printf("client hello msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
     ret = SSL_accept(ssl);
     
@@ -196,7 +204,27 @@ int main(int argc, char **argv)
     len = BIO_read(server_io, bio_buf, len);
     printf("bio buf: %s\n", bio_buf);
     
-    send(new_fd, bio_buf, len, 0);
+    send(new_fd, bio_buf, len, 0);//send server hello
+
+    len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
+    printf("client cipher msg: %s, len = %d\n", buffer, strlen(buffer));
+    BIO_write(server_io, buffer, len);
+    ret = SSL_do_handshake(ssl);
+   
+/*
+    const char *cipher_name = SSL_get_cipher_name(ssl);
+    printf("cipher name: %s\n", cipher_name);
+    const char *cipher_version = SSL_get_cipher_version(ssl);
+    printf("cipher version: %s\n", cipher_version);
+
+    EVP_CIPHER *evp_cipher = NULL;
+    SSL_SESSION *ssl_session = NULL;
+    SSL_CIPHER *ssl_cipher = NULL;
+
+    ssl_session = SSL_get_session(ssl);
+    ssl_cipher = SSL_get_current_cipher(ssl);
+    ssl_cipher_get_evp_cipher(ctx, ssl_cipher, &evp_cipher);
+*/
 
     SSL_shutdown(ssl);
     SSL_free(ssl);

@@ -22,6 +22,7 @@ int main()
 	b = BIO_push(bc, b);
 	len = BIO_write(b, "openssl", 7);
 	len = BIO_read(b, tmp, 1024);
+    printf("encrypt: %s\n", tmp);
 	BIO_free(b);
 
 	/* decrypt */
@@ -34,7 +35,7 @@ int main()
 	bd = BIO_push(bdec, bd);
 	len = BIO_write(bdec, tmp, len);
 	len = BIO_read(bd, tmp, 1024);
-	printf("tmp = %s\n", tmp);
+	printf("decrypt: %s\n", tmp);
 	BIO_free(bdec);
 
 	return 0;
