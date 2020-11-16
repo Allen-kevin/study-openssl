@@ -205,7 +205,8 @@ int main(int argc, char **argv)
     printf("bio buf: %s\n", bio_buf);
     
     send(new_fd, bio_buf, len, 0);//send server hello
-
+    
+    memset(buffer, 0, MAXBUF+1);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
     printf("client cipher msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
