@@ -93,17 +93,23 @@ int main(int argc, char **argv)
 	}
     
     BIO *client = NULL, *client_io = NULL;
-    size_t bufsiz = 1024;
+    size_t bufsiz = 2048;
 
     if (!BIO_new_bio_pair(&client, bufsiz, &client_io, bufsiz)) {
         ERR_print_errors_fp(stdout);
         exit(1);
     }
+	
+	/* Non-blocking bio. */
+	BIO_set_nbio(client, 1);
+	BIO_set_nbio(client_io, 1);
 
 	ssl = SSL_new(ctx);
     SSL_set_bio(ssl, client, client);
-    ret = SSL_connect(ssl); //
-    
+	SSL_set_connect_state(ssl);
+	SSL_do_handshake(ssl);
+//    ret = SSL_connect(ssl); //
+    ;
     len = BIO_ctrl_pending(client_io);
 
     if (len <= 0)
@@ -114,13 +120,14 @@ int main(int argc, char **argv)
     
     send(sockfd, buffer, len, 0); //send client hello
 
+	printf("client state: %s\n", SSL_state_string_long(ssl));
     //receive server hello
 	memset(buffer, 0, 1024);
     len = recv(sockfd, buffer, 1024, 0);
     printf("msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(client_io, buffer, len);
 	if (!SSL_is_init_finished(ssl)) {
-    	ret = SSL_connect(ssl);
+    	ret = SSL_do_handshake(ssl);
 
 		len = BIO_ctrl_pending(client_io);
 		printf("client cipher len = %d\n", len);
