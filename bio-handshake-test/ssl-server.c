@@ -184,7 +184,7 @@ int main(int argc, char **argv)
 
     if (!BIO_new_bio_pair(&server, bufsiz, &server_io, bufsiz)) {
         ERR_print_errors_fp(stdout);
-        exit(1);
+        goto err;
     }
 
     ssl = SSL_new(ctx);
@@ -205,13 +205,14 @@ int main(int argc, char **argv)
     printf("bio buf: %s\n", bio_buf);
     
     send(new_fd, bio_buf, len, 0);//send server hello
-    
+ 
+    printf("server state: %s\n", SSL_state_string_long(ssl));
     memset(buffer, 0, MAXBUF+1);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
     printf("client cipher msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
     ret = SSL_do_handshake(ssl);
-   
+
 /*
     const char *cipher_name = SSL_get_cipher_name(ssl);
     printf("cipher name: %s\n", cipher_name);
@@ -226,7 +227,7 @@ int main(int argc, char **argv)
     ssl_cipher = SSL_get_current_cipher(ssl);
     ssl_cipher_get_evp_cipher(ctx, ssl_cipher, &evp_cipher);
 */
-
+err:
     SSL_shutdown(ssl);
     SSL_free(ssl);
 	SSL_CTX_free(ctx);
