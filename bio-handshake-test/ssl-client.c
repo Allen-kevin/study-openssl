@@ -103,40 +103,40 @@ int main(int argc, char **argv)
 	ssl = SSL_new(ctx);
     SSL_set_bio(ssl, client, client);
     ret = SSL_connect(ssl); //
-    printf("ret = %d\n", ret);
     
     len = BIO_ctrl_pending(client_io);
 
     if (len <= 0)
         goto err;
 
-    buffer = (char *)OPENSSL_malloc(len);
-	len = BIO_read(client_io, buffer, len);
-    
-	if (len > 0) {
-		printf("rcv msg success: %s, total %d bytes\n", buffer, strlen(buffer));
-	} else {
-		printf("rcv msg failure!, error code %d, error msg %s\n",
-			errno, strerror(errno));
-		goto err;
-	}
+    buffer = (char *)OPENSSL_malloc(1024);
+	len = BIO_read(client_io, buffer, 1024);
     
     send(sockfd, buffer, len, 0); //send client hello
 
     //receive server hello
-    len = recv(sockfd, buffer, sizeof(buffer)-1, 0);
+	memset(buffer, 0, 1024);
+    len = recv(sockfd, buffer, 1024, 0);
     printf("msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(client_io, buffer, len);
-    ret = SSL_do_handshake(ssl);
-    len =BIO_ctrl_pending(client_io);
-    if (len <= 0)
-        goto err;
-    buffer_cipher = (char *)OPENSSL_malloc(len);
-    len = BIO_read(client_io, buffer, len);
+	if (!SSL_is_init_finished(ssl)) {
+    	ret = SSL_connect(ssl);
 
-    send(sockfd, buffer_cipher, len, 0);//
+		len = BIO_ctrl_pending(client_io);
+		printf("client cipher len = %d\n", len);
+		if (len <= 0) {
+			goto err;
+		}
+		buffer_cipher = (char *)OPENSSL_malloc(1024);
+		len = BIO_read(client_io, buffer_cipher, len);
+
+		send(sockfd, buffer_cipher, len, 0);//
+		printf("what happen!\n");
+	}
+
 
 err:
+	printf("client err!\n");
     close(sockfd);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
