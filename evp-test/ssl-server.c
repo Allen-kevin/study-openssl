@@ -18,7 +18,8 @@
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
 #include <openssl/symhacks.h>
-#define MAXBUF 1024
+#define MAXBUF 4096
+#define BUFSIZE 4096
 
 int tcp_socket(char **argv)
 {
@@ -179,9 +180,8 @@ int main(int argc, char **argv)
 
     EVP_CIPHER_CTX *evp_ctx;
     BIO *server = NULL, *server_io = NULL;
-    size_t bufsiz = 1024;
 
-    if (!BIO_new_bio_pair(&server, bufsiz, &server_io, bufsiz)) {
+    if (!BIO_new_bio_pair(&server, BUFSIZE, &server_io, BUFSIZE)) {
         ERR_print_errors_fp(stdout);
         goto err;
     }
@@ -192,7 +192,7 @@ int main(int argc, char **argv)
 
     new_fd = tcp_socket(argv);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
-    printf("client hello msg: %s, len = %d\n", buffer, strlen(buffer));
+    printf("rcv client hello msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
     ret = SSL_accept(ssl);
     
@@ -205,17 +205,35 @@ int main(int argc, char **argv)
     
     send(new_fd, bio_buf, len, 0);//send server hello
 
-    BIO_get_cipher_ctx(server_io, &evp_ctx);
-    if (evp_ctx == NULL)
-        printf("get ctx failure!\n");
-
-    printf("server state: %s\n", SSL_state_string_long(ssl));
     memset(buffer, 0, MAXBUF+1);
     len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
     printf("client cipher msg: %s, len = %d\n", buffer, strlen(buffer));
     BIO_write(server_io, buffer, len);
     ret = SSL_do_handshake(ssl);
 
+    char out[1024], in[1024];
+   // EVP_DecryptUpdate(evp_ctx, out, &len, buffer, 100);
+   // printf("decrypt msg: %s, len = %d\n", out, strlen(out));
+   //
+ /* test send data */
+    memset(buffer, 0, MAXBUF);
+    strcpy(buffer, "hello world");
+    SSL_write(ssl, buffer, strlen(buffer));
+    len = 0;
+    len = BIO_ctrl_pending(server_io);
+    printf("encrypt len = %d\n", len);
+    BIO_read(server_io, out, len);
+    printf("encrypt msg = %s\n", out);
+    send(new_fd, out, len, 0);//send encrypt data
+
+    /* test recv data */
+    memset(buffer, 0, MAXBUF);
+    len = recv(new_fd, buffer, sizeof(buffer)-1, 0);
+    printf("not decrypt msg = %s\n", buffer);
+    len = BIO_write(server_io, buffer, len);
+    memset(out, 0, MAXBUF);
+    SSL_read(ssl, out, len);
+    printf("decrypt msg = %s\n", out);
    /*
     const char *cipher_name = SSL_get_cipher_name(ssl);
     printf("cipher name: %s\n", cipher_name);
