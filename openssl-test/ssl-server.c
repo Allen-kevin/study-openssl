@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 			close(new_fd);
 			break;
 		}
-
+#if 0
 		bzero(buf, MAXBUF+1);
 		strcpy(buf, "server->client");
 		len = SSL_write(ssl, buf, strlen(buf));
@@ -121,6 +121,7 @@ int main(int argc, char **argv)
 			printf("msg %s send success, total send msg %d bytes!\n",
 				buf, len);
 		}
+#endif
 		bzero(buf, MAXBUF+1);
 		len = SSL_read(ssl, buf, MAXBUF);
 		if (len > 0) {
