@@ -1,0 +1,11 @@
+build client:
+gcc ssl-client -o client -lssl -lcrypto -g
+
+build server:
+gcc ssl-server -o server -lssl -lcrypto -g
+
+run as client:
+./clent <ip> <port>
+
+run as server:
+./server <port> 1 <ip> cacert.pem privkey.pem
