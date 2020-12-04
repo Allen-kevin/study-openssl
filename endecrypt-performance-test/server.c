@@ -20,6 +20,9 @@
 #include <openssl/async.h>
 #include <openssl/symhacks.h>
 #include <openssl/ct.h>
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 #define MAXBUF 1500
 
 #define TLS_HANDSHAKE_INIT 1
@@ -28,6 +31,7 @@
 
 struct tls_bio {
     int state;
+    int fd;
     void (*tls_handshake)(int fd, SSL *ssl, BIO *sink);
     SSL *ssl;
     BIO *source;
@@ -127,8 +131,6 @@ void tls_ssl_init(SSL_CTX *ctx, char **argv)
 	OpenSSL_add_all_algorithms();
 	SSL_load_error_strings();
 
-	ctx = SSL_CTX_new(SSLv23_server_method());
-
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stdout);
 		exit(1);
@@ -150,6 +152,48 @@ void tls_ssl_init(SSL_CTX *ctx, char **argv)
 	}
 }
 
+
+static int decrypt(struct tls_bio *tls, int len, char *buffer)
+{
+
+    len = BIO_write(tls->sink, buffer, len);
+    if (unlikely(len <= 0)) {
+        printf("BIO write failure!\n");
+        return len;
+    }
+    memset(buffer, 0, len);
+
+    return SSL_read(tls->ssl, buffer, len);
+}
+
+static int tls_rcv(struct tls_bio *tls, char *buffer)
+{
+    int len = 0;
+
+    len = recv(tls->fd, buffer, sizeof(buffer)-1, 0);
+
+    return decrypt(tls, len, buffer);
+}
+
+
+static int encrypt(struct tls_bio *tls, int len, char *buffer)
+{
+    SSL_write(tls->ssl, buffer, MAXBUF);
+    len = BIO_ctrl_pending(tls->sink);
+    if (unlikely(len <= 0)) {
+        printf("ssl write failure!\n");
+        exit(-1);
+    }
+    return BIO_read(tls->sink, buffer, len);
+}
+
+
+static int tls_send(struct tls_bio *tls, char *buffer, int len)
+{
+    len = encrypt(tls, len, buffer);
+    
+    send(tls->fd, buffer, len, 0);//send server hello
+}
 
 static void tls_handshake(int fd, SSL *ssl, BIO *server_io)
 {
@@ -171,13 +215,6 @@ static void tls_handshake(int fd, SSL *ssl, BIO *server_io)
 
 }
 
-void tls_init()
-{
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-}
-
 
 static void tls_bio_init(struct tls_bio *tls, SSL *ssl, BIO *server, BIO *server_io, void (*tls_handshake)())
 {
@@ -189,16 +226,16 @@ static void tls_bio_init(struct tls_bio *tls, SSL *ssl, BIO *server, BIO *server
 }
 
 
-static int tls_handshake_complete(int fd, struct tls_bio *tls)
+static int tls_handshake_complete(struct tls_bio *tls)
 {
     while (tls->state != TLS_HANDSHAKE_END) {
         if (tls->state == TLS_HANDSHAKE_INIT) {
-            tls->tls_handshake(fd, tls->ssl, tls->sink);
+            tls->tls_handshake(tls->fd, tls->ssl, tls->sink);
             tls->state = TLS_HANDSHAKE_WAITING;
             printf("init\n");
         } else if (tls->state == TLS_HANDSHAKE_WAITING) {
             printf("waiting\n");
-            tls->tls_handshake(fd, tls->ssl, tls->sink);
+            tls->tls_handshake(tls->fd, tls->ssl, tls->sink);
             printf("end\n");
             tls->state = TLS_HANDSHAKE_END;
         } 
@@ -207,55 +244,41 @@ static int tls_handshake_complete(int fd, struct tls_bio *tls)
     return 0;
 }
 
+static void tls_app_rcv_send(struct tls_bio *tls)
+{
+	char buffer[MAXBUF];
+    int len;
+
+    memset(buffer, 0, MAXBUF);
+
+    len = tls_rcv(tls, buffer);
+    tls_send(tls, buffer, len);
+}
+
 int main(int argc, char **argv)
 {
-	char buffer[MAXBUF+1];
-    int new_fd, ret = 1, len;
-
 	SSL_CTX *ctx;
     SSL *ssl;
     struct tls_bio tls_bio_test;
 
-    tls_init();
-
+    tls_bio_test.fd = tcp_socket(argv);
 	ctx = SSL_CTX_new(SSLv23_server_method());
-
-	if (ctx == NULL) {
-		ERR_print_errors_fp(stdout);
-		exit(1);
-	}
-
-	if (SSL_CTX_use_certificate_file(ctx, argv[4], SSL_FILETYPE_PEM) <= 0) {
-		ERR_print_errors_fp(stdout);
-		exit(1);
-	}
-
-	if (SSL_CTX_use_PrivateKey_file(ctx, argv[5], SSL_FILETYPE_PEM) <= 0) {
-		ERR_print_errors_fp(stdout);
-		exit(1);
-	}
-
-	if (!SSL_CTX_check_private_key(ctx)) {
-		ERR_print_errors_fp(stdout);
-		exit(1);
-	}
-    //tls_ssl_init(ctx, argv);
+    tls_ssl_init(ctx, argv);
+    ssl = SSL_new(ctx);
 
     BIO *server = NULL, *server_io = NULL;
-    size_t bufsiz = 1500;
 
-    if (!BIO_new_bio_pair(&server, bufsiz, &server_io, bufsiz)) {
+    if (!BIO_new_bio_pair(&server, MAXBUF, &server_io, MAXBUF)) {
         ERR_print_errors_fp(stdout);
         goto err;
     }
 
-    ssl = SSL_new(ctx);
     SSL_set_bio(ssl, server, server);
 
-    new_fd = tcp_socket(argv);
     tls_bio_init(&tls_bio_test, ssl, server, server_io, tls_handshake);
-    tls_handshake_complete(new_fd, &tls_bio_test);
-
+    tls_handshake_complete(&tls_bio_test);
+    
+    tls_app_rcv_send(&tls_bio_test);
 err:
     SSL_shutdown(ssl);
     SSL_free(ssl);
