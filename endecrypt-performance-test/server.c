@@ -36,6 +36,7 @@ struct tls_bio {
     SSL *ssl;
     BIO *source;
     BIO *sink;
+    char *buffer;
 };
 
 int tcp_socket(char **argv)
@@ -153,46 +154,49 @@ void tls_ssl_init(SSL_CTX *ctx, char **argv)
 }
 
 
-static int decrypt(struct tls_bio *tls, int len, char *buffer)
+static int decrypt(struct tls_bio *tls, int len)
 {
 
-    len = BIO_write(tls->sink, buffer, len);
+    len = BIO_write(tls->sink, tls->buffer, len);
     if (unlikely(len <= 0)) {
         printf("BIO write failure!\n");
         return len;
     }
-    memset(buffer, 0, len);
+    memset(tls->buffer, 0, len);
+
+    len = SSL_read(tls->ssl, tls->buffer, len);
 
     return SSL_read(tls->ssl, buffer, len);
 }
 
-static int tls_rcv(struct tls_bio *tls, char *buffer)
+static int tls_rcv(struct tls_bio *tls)
 {
     int len = 0;
 
-    len = recv(tls->fd, buffer, sizeof(buffer)-1, 0);
+    memset(tls->buffer, 0, MAXBUF);
+    len = recv(tls->fd, tls->buffer, MAXBUF, 0);
 
-    return decrypt(tls, len, buffer);
+    return decrypt(tls, len);
 }
 
 
-static int encrypt(struct tls_bio *tls, int len, char *buffer)
+static int encrypt(struct tls_bio *tls, int len)
 {
-    SSL_write(tls->ssl, buffer, MAXBUF);
+    SSL_write(tls->ssl, tls->buffer, MAXBUF);
     len = BIO_ctrl_pending(tls->sink);
     if (unlikely(len <= 0)) {
         printf("ssl write failure!\n");
         exit(-1);
     }
-    return BIO_read(tls->sink, buffer, len);
+    return BIO_read(tls->sink, tls->buffer, len);
 }
 
 
-static int tls_send(struct tls_bio *tls, char *buffer, int len)
+static int tls_send(struct tls_bio *tls, int len)
 {
-    len = encrypt(tls, len, buffer);
+    len = encrypt(tls, len);
     
-    send(tls->fd, buffer, len, 0);//send server hello
+    return send(tls->fd, tls->buffer, len, 0);//send server change cipher
 }
 
 static void tls_handshake(int fd, SSL *ssl, BIO *server_io)
@@ -223,6 +227,7 @@ static void tls_bio_init(struct tls_bio *tls, SSL *ssl, BIO *server, BIO *server
     tls->source = server;
     tls->sink = server_io;
     tls->ssl = ssl;
+    tls->buffer = (char *)malloc(MAXBUF);
 }
 
 
@@ -232,11 +237,8 @@ static int tls_handshake_complete(struct tls_bio *tls)
         if (tls->state == TLS_HANDSHAKE_INIT) {
             tls->tls_handshake(tls->fd, tls->ssl, tls->sink);
             tls->state = TLS_HANDSHAKE_WAITING;
-            printf("init\n");
         } else if (tls->state == TLS_HANDSHAKE_WAITING) {
-            printf("waiting\n");
             tls->tls_handshake(tls->fd, tls->ssl, tls->sink);
-            printf("end\n");
             tls->state = TLS_HANDSHAKE_END;
         } 
     }
@@ -246,13 +248,12 @@ static int tls_handshake_complete(struct tls_bio *tls)
 
 static void tls_app_rcv_send(struct tls_bio *tls)
 {
-	char buffer[MAXBUF];
+	//char *buffer = (char *)malloc(sizeof(MAXBUF));
     int len;
 
-    memset(buffer, 0, MAXBUF);
-
-    len = tls_rcv(tls, buffer);
-    tls_send(tls, buffer, len);
+    len = tls_rcv(tls);
+    printf("msg: %s\n", tls->buffer);
+    len = tls_send(tls, len);
 }
 
 int main(int argc, char **argv)
@@ -279,6 +280,7 @@ int main(int argc, char **argv)
     tls_handshake_complete(&tls_bio_test);
     
     tls_app_rcv_send(&tls_bio_test);
+
 err:
     SSL_shutdown(ssl);
     SSL_free(ssl);
