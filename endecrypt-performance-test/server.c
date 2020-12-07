@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -98,34 +99,6 @@ int tcp_socket(char **argv)
 }
 
 
-void recv_send_data(int sockfd)
-{
-    int new_fd;
-	socklen_t len;
-    struct sockaddr_in their_addr;
-
-	len = sizeof(struct sockaddr);
-	if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &len))
-		== -1) {
-		perror("accept");
-		exit(errno);
-	} else {
-		printf("server: got connection from %s, port %d, socket %d\n",
-		inet_ntoa(their_addr.sin_addr),
-		ntohs(their_addr.sin_port), new_fd);
-	}
-    
-    char buf[4096];
-    int recv_len = 0;
-    recv_len = recv(new_fd, buf, sizeof(buf)-1, 0);
-    if (recv_len <= 0) {
-        printf("receive failure, close session!\n");
-        close(new_fd);
-        return;
-    }
-
-}
-
 void tls_ssl_init(SSL_CTX *ctx, char **argv)
 {
 	SSL_library_init();
@@ -164,9 +137,7 @@ static int decrypt(struct tls_bio *tls, int len)
     }
     memset(tls->buffer, 0, len);
 
-    len = SSL_read(tls->ssl, tls->buffer, len);
-
-    return SSL_read(tls->ssl, buffer, len);
+    return SSL_read(tls->ssl, tls->buffer, len);
 }
 
 static int tls_rcv(struct tls_bio *tls)
@@ -182,8 +153,9 @@ static int tls_rcv(struct tls_bio *tls)
 
 static int encrypt(struct tls_bio *tls, int len)
 {
-    SSL_write(tls->ssl, tls->buffer, MAXBUF);
+    SSL_write(tls->ssl, tls->buffer, len);
     len = BIO_ctrl_pending(tls->sink);
+
     if (unlikely(len <= 0)) {
         printf("ssl write failure!\n");
         exit(-1);
@@ -246,14 +218,27 @@ static int tls_handshake_complete(struct tls_bio *tls)
     return 0;
 }
 
+
+
 static void tls_app_rcv_send(struct tls_bio *tls)
 {
-	//char *buffer = (char *)malloc(sizeof(MAXBUF));
     int len;
-
-    len = tls_rcv(tls);
-    printf("msg: %s\n", tls->buffer);
-    len = tls_send(tls, len);
+    int count = 0;
+    uint32_t sum_time = 0;
+    uint32_t sum_length = 0;
+    struct timeval begin, end;
+    
+    while (count < 10) {
+        gettimeofday(&begin, NULL);//testing
+        len = tls_rcv(tls);
+        printf("msg: %s\n", tls->buffer);
+        len = tls_send(tls, len);
+        gettimeofday(&end, NULL);//testing
+        count ++;
+        sum_time += end.tv_sec*1000000 - begin.tv_sec*1000000 + end.tv_usec - begin.tv_usec;
+        sum_length += 2*len;
+    }
+    printf("sum time = %lld, sum length = %lld\n", sum_time, sum_length);
 }
 
 int main(int argc, char **argv)
