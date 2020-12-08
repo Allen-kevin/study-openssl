@@ -29,6 +29,10 @@
 #define TLS_HANDSHAKE_INIT 1
 #define TLS_HANDSHAKE_WAITING 2
 #define TLS_HANDSHAKE_END 3
+uint32_t de_sum_time = 0;
+uint32_t de_sum_length = 0;
+uint32_t en_sum_time = 0;
+uint32_t en_sum_length = 0;
 
 struct tls_bio {
     int state;
@@ -142,12 +146,19 @@ static int decrypt(struct tls_bio *tls, int len)
 
 static int tls_rcv(struct tls_bio *tls)
 {
-    int len = 0;
+    int len = 0, rlen = 0;
+    struct timeval begin, end;
 
     memset(tls->buffer, 0, MAXBUF);
     len = recv(tls->fd, tls->buffer, MAXBUF, 0);
 
-    return decrypt(tls, len);
+    gettimeofday(&begin, NULL);//testing
+    rlen = decrypt(tls, len);
+    gettimeofday(&end, NULL);//testing
+    de_sum_length += len;
+    de_sum_time += end.tv_sec*1000000 - begin.tv_sec*1000000 + end.tv_usec - begin.tv_usec;
+
+    return rlen;
 }
 
 
@@ -166,9 +177,16 @@ static int encrypt(struct tls_bio *tls, int len)
 
 static int tls_send(struct tls_bio *tls, int len)
 {
-    len = encrypt(tls, len);
+    struct timeval begin, end;
+    int wlen = 0;
+
+    gettimeofday(&begin, NULL);//testing
+    wlen = encrypt(tls, len);
+    gettimeofday(&end, NULL);//testing
+    en_sum_time += end.tv_sec*1000000 - begin.tv_sec*1000000 + end.tv_usec - begin.tv_usec;
+    en_sum_length += len;
     
-    return send(tls->fd, tls->buffer, len, 0);//send server change cipher
+    return send(tls->fd, tls->buffer, wlen, 0);//send server change cipher
 }
 
 static void tls_handshake(int fd, SSL *ssl, BIO *server_io)
@@ -224,21 +242,28 @@ static void tls_app_rcv_send(struct tls_bio *tls)
 {
     int len;
     int count = 0;
-    uint32_t sum_time = 0;
-    uint32_t sum_length = 0;
-    struct timeval begin, end;
-    
-    while (count < 10) {
-        gettimeofday(&begin, NULL);//testing
+       
+    while (count < 1000) {
         len = tls_rcv(tls);
-        printf("msg: %s\n", tls->buffer);
         len = tls_send(tls, len);
-        gettimeofday(&end, NULL);//testing
         count ++;
-        sum_time += end.tv_sec*1000000 - begin.tv_sec*1000000 + end.tv_usec - begin.tv_usec;
-        sum_length += 2*len;
     }
-    printf("sum time = %lld, sum length = %lld\n", sum_time, sum_length);
+    printf("decrypt sum time = %lld, sum length = %lld, rate = %lf Mbit/s\n", de_sum_time, de_sum_length, de_sum_length*1.0*8*1000*1000/(de_sum_time*1024*1024));
+    printf("encrypt sum time = %lld, sum length = %lld, rate = %lf Mbit/s\n", en_sum_time, en_sum_length, en_sum_length*1.0*8*1000*1000/(en_sum_time*1024*1024));
+}
+
+
+static void tls_get_cipher_info(struct tls_bio *tls)
+{
+    const char *cipher_name;
+    const char *cipher_version;
+
+    cipher_name = SSL_get_cipher_name(tls->ssl);
+    cipher_version = SSL_get_cipher_version(tls->ssl);
+
+    printf("cipher name: %s\n", cipher_name);
+    printf("cipher version: %s\n", cipher_version);
+
 }
 
 int main(int argc, char **argv)
@@ -264,6 +289,8 @@ int main(int argc, char **argv)
     tls_bio_init(&tls_bio_test, ssl, server, server_io, tls_handshake);
     tls_handshake_complete(&tls_bio_test);
     
+    tls_get_cipher_info(&tls_bio_test);
+
     tls_app_rcv_send(&tls_bio_test);
 
 err:
