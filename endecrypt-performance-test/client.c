@@ -118,7 +118,7 @@ int main(int argc, char **argv)
 finish:
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
-	close(sockfd);
+	shutdown(sockfd, SHUT_WR);
 	SSL_CTX_free(ctx);
 	return 0;
 }
