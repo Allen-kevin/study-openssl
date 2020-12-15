@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 
 	tls_init();
 	sockfd = tcp_handshake(argc, argv);
-
+//#if 1
 	ctx = SSL_CTX_new(SSLv23_client_method());
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stdout);
@@ -98,6 +98,7 @@ int main(int argc, char **argv)
 		ShowCerts(ssl);
 	}
 
+#if 0
 	bzero(buffer, MAXBUF+1);
 	strcpy(buffer, "from client->server");
 	len = SSL_write(ssl, buffer, strlen(buffer));
@@ -109,7 +110,6 @@ int main(int argc, char **argv)
 		printf("msg %s send success, total send %d bytes.\n",
 			buffer, len);
 	}
-#if 1
 	bzero(buffer, MAXBUF+1);
 	len = SSL_read(ssl, buffer, MAXBUF);
 	if (len > 0) {
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 		goto finish;
 	}
 #endif
-#if 1
+#if 0
 	bzero(buffer, MAXBUF+1);
 	len = SSL_read(ssl, buffer, MAXBUF);
 	if (len > 0) {
@@ -131,11 +131,11 @@ int main(int argc, char **argv)
 		goto finish;
 	}
 #endif
-
+	sleep(2);
 finish:
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
-	close(sockfd);
+	shutdown(sockfd, SHUT_WR);
 	SSL_CTX_free(ctx);
 	return 0;
 }
