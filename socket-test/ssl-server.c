@@ -75,14 +75,19 @@ void recv_send_data(int sockfd)
 		ntohs(their_addr.sin_port), new_fd);
 	}
     
+    printf("server get from client port: %d, new fd = %d\n", their_addr.sin_port, new_fd);
     char buf[4096];
     int recv_len = 0;
-    recv_len = recv(new_fd, buf, sizeof(buf)-1, 0);
-    if (recv_len <= 0) {
-        printf("receive failure, close session!\n");
-        close(new_fd);
-    } else {
-        printf("msg: %s\n", buf);
+    int slen = 0;
+    while (1) { 
+        recv_len = recv(new_fd, buf, sizeof(buf)-1, 0);
+        if (recv_len <= 0) {
+            printf("receive failure, close session!\n");
+            close(new_fd);
+        } else {
+            printf("msg: %s\n", buf);
+        }
+        slen = send(new_fd, buf, recv_len, 0);
     }
 }
 

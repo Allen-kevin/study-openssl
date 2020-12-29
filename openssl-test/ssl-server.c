@@ -88,7 +88,7 @@ int main(int argc, char **argv)
 	} else
 		printf("begin listen\n");
 
-	while (1) {
+//	while (1) {
 		SSL *ssl;
 		len = sizeof(struct sockaddr);
 		if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &len))
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 		if (SSL_accept(ssl) == -1) {
 			perror("accept");
 			close(new_fd);
-			break;
+			return 0;
 		}
 #if 0
 		bzero(buf, MAXBUF+1);
@@ -131,13 +131,25 @@ int main(int argc, char **argv)
 			printf("msg failure! errno code %d, errno msg %s\n",
 				errno, strerror(errno));
 		}
+#if 1
+		bzero(buf, MAXBUF+1);
+		strcpy(buf, "server->client");
+		len = SSL_write(ssl, buf, strlen(buf));
 
-	finish:
+		printf("msg %s send success, total send msg %d bytes!\n",
+				buf, len);
+#endif
+
+//	finish:
+//		SSL_shutdown(ssl);
+//		SSL_free(ssl);
+//		close(new_fd);
+//	}
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
-		close(new_fd);
-	}
-
+        shutdown(new_fd, SHUT_WR);
+	//	close(new_fd);
+    //close(new_fd);
 	close(sockfd);
 	SSL_CTX_free(ctx);
 	return 0;
