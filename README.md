@@ -84,4 +84,4 @@ gcc ssl-server.c -o server -lssl -lcrypto -g
 简单的TCP/IP套接字使用示例。
 
 ## Contributors
-wanwenkai@ict.ac.cn
+wanwenkai29@gmail.com
